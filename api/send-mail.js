@@ -1,7 +1,6 @@
 import nodemailer from 'nodemailer';
 import crypto from 'crypto';
 
-// Simple email validation regex
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function parseAndValidateEmails(input) {
@@ -13,7 +12,7 @@ function parseAndValidateEmails(input) {
   const cleaned = list.map(e => String(e).trim()).filter(Boolean);
   for (const email of cleaned) {
     if (!EMAIL_REGEX.test(email)) {
-      return null; // Signals invalid email format
+      return null; 
     }
   }
   return cleaned;
@@ -24,13 +23,11 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // 1. Check Request Size Cap (e.g., max 100KB)
   const contentLength = parseInt(req.headers['content-length'] || '0', 10);
   if (contentLength > 100 * 1024) {
     return res.status(413).json({ error: 'Payload too large' });
   }
 
-  // 2. Authentication: Require Bearer token, fail closed if key is missing
   const serverApiKey = process.env.EMAIL_API_KEY;
   const authHeader = req.headers['authorization'];
 
@@ -55,7 +52,6 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  // 3. Extract and Validate Fields
   const { recipient, subject, message, html, cc, bcc, replyTo, senderName } = req.body || {};
 
   if (!subject || typeof subject !== 'string' || !subject.trim()) {
@@ -74,7 +70,6 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Malformed or invalid email addresses in recipient, cc, or bcc' });
   }
 
-  // Cap recipient count (e.g. max 50 total recipients)
   const totalRecipientsCount = toList.length + ccList.length + bccList.length;
   if (totalRecipientsCount > 50) {
     return res.status(400).json({ error: 'Recipient count exceeds maximum limit of 50' });
@@ -88,7 +83,6 @@ export default async function handler(req, res) {
     validatedReplyTo = replyTo.trim();
   }
 
-  // 4. Configure Sender Address (Enforce server-controlled sender)
   const fromEmail = process.env.EMAIL_FROM_ADDRESS || process.env.GMAIL_USER;
   const displayName = typeof senderName === 'string' && senderName.trim() ? senderName.trim() : 'Vercel App';
 
@@ -125,14 +119,19 @@ export default async function handler(req, res) {
 
     const info = await transporter.sendMail(mailOptions);
 
-    // 5. Success Response (Do not log message bodies or secrets)
     return res.status(200).json({
       ok: true,
       messageId: info.messageId,
     });
 
   } catch (error) {
-    // Return generic 502 for provider failures, avoiding internal error leaks
+    // DEBUG LOG: Safely log the error message and code to Vercel console (No secrets/bodies logged)
+    console.error('SMTP Connection/Auth Error:', {
+      message: error.message,
+      code: error.code,
+      command: error.command
+    });
+
     return res.status(502).json({
       ok: false,
       error: 'Failed to deliver email through provider',
