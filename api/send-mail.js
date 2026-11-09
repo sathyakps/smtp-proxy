@@ -22,8 +22,8 @@ export default async function handler(req, res) {
   // 1. Handle GET requests for testing environment variables & connection
   if (req.method === 'GET') {
     const missingVars = [];
-    if (!process.env.GMAIL_USER) missingVars.push('GMAIL_USER');
-    if (!process.env.GMAIL_PASS) missingVars.push('GMAIL_PASS');
+    if (!process.env.EMAIL_FROM_ADDRESS) missingVars.push('EMAIL_FROM_ADDRESS');
+    if (!process.env.EMAIL_SMTP_PASS) missingVars.push('EMAIL_SMTP_PASS');
     if (!process.env.EMAIL_API_KEY) missingVars.push('EMAIL_API_KEY');
 
     if (missingVars.length > 0) {
@@ -39,8 +39,8 @@ export default async function handler(req, res) {
       port: 465,
       secure: true,
       auth: {
-        user: process.env.GMAIL_USER,
-        pass: process.env.GMAIL_PASS,
+        user: process.env.EMAIL_FROM_ADDRESS,
+        pass: process.env.EMAIL_SMTP_PASS,
       },
     });
 
@@ -70,12 +70,21 @@ export default async function handler(req, res) {
     return res.status(413).json({ error: 'Payload too large' });
   }
 
-  // Check if server environment variable is missing
+  // Check required environment variables on POST
   const serverApiKey = process.env.EMAIL_API_KEY;
-  if (!serverApiKey) {
+  const smtpUser = process.env.EMAIL_FROM_ADDRESS;
+  const smtpPass = process.env.EMAIL_SMTP_PASS;
+
+  const missingServerVars = [];
+  if (!serverApiKey) missingServerVars.push('EMAIL_API_KEY');
+  if (!smtpUser) missingServerVars.push('EMAIL_FROM_ADDRESS');
+  if (!smtpPass) missingServerVars.push('EMAIL_SMTP_PASS');
+
+  if (missingServerVars.length > 0) {
     return res.status(500).json({ 
       ok: false, 
-      error: 'Server configuration error: EMAIL_API_KEY is missing on the server environment variables.' 
+      error: `Server configuration error: Missing environment variables on server: ${missingServerVars.join(', ')}`,
+      missingVariables: missingServerVars
     });
   }
 
@@ -146,7 +155,6 @@ export default async function handler(req, res) {
     validatedReplyTo = replyTo.trim();
   }
 
-  const fromEmail = process.env.EMAIL_FROM_ADDRESS || process.env.GMAIL_USER;
   const displayName = typeof senderName === 'string' && senderName.trim() ? senderName.trim() : 'Vercel App';
 
   const transporter = nodemailer.createTransport({
@@ -154,14 +162,14 @@ export default async function handler(req, res) {
     port: 465,
     secure: true,
     auth: {
-      user: process.env.GMAIL_USER,
-      pass: process.env.GMAIL_PASS,
+      user: smtpUser,
+      pass: smtpPass,
     },
   });
 
   try {
     const mailOptions = {
-      from: `"${displayName}" <${fromEmail}>`,
+      from: `"${displayName}" <${smtpUser}>`,
       to: toList.join(', '),
       subject: subject.trim(),
       text: message,
