@@ -19,6 +19,48 @@ function parseAndValidateEmails(input) {
 }
 
 export default async function handler(req, res) {
+  // 1. Handle GET requests for testing environment variables & connection
+  if (req.method === 'GET') {
+    const missingVars = [];
+    if (!process.env.GMAIL_USER) missingVars.push('GMAIL_USER');
+    if (!process.env.GMAIL_PASS) missingVars.push('GMAIL_PASS');
+    if (!process.env.EMAIL_API_KEY) missingVars.push('EMAIL_API_KEY');
+
+    if (missingVars.length > 0) {
+      return res.status(500).json({
+        ok: false,
+        error: `Missing required environment variables: ${missingVars.join(', ')}`,
+        missingVariables: missingVars
+      });
+    }
+
+    const transporter = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
+      auth: {
+        user: process.env.GMAIL_USER,
+        pass: process.env.GMAIL_PASS,
+      },
+    });
+
+    try {
+      await transporter.verify();
+      return res.status(200).json({
+        ok: true,
+        message: 'SMTP configuration, credentials, and API key are fully valid!'
+      });
+    } catch (error) {
+      console.error('SMTP Verify Error:', error.message);
+      return res.status(502).json({
+        ok: false,
+        error: 'SMTP connection failed with provided credentials',
+        details: error.message
+      });
+    }
+  }
+
+  // 2. Handle POST requests for sending mail
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -28,11 +70,29 @@ export default async function handler(req, res) {
     return res.status(413).json({ error: 'Payload too large' });
   }
 
+  // Check if server environment variable is missing
   const serverApiKey = process.env.EMAIL_API_KEY;
-  const authHeader = req.headers['authorization'];
+  if (!serverApiKey) {
+    return res.status(500).json({ 
+      ok: false, 
+      error: 'Server configuration error: EMAIL_API_KEY is missing on the server environment variables.' 
+    });
+  }
 
-  if (!serverApiKey || !authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Unauthorized' });
+  // Check if client provided authorization header
+  const authHeader = req.headers['authorization'];
+  if (!authHeader) {
+    return res.status(401).json({ 
+      ok: false, 
+      error: 'Unauthorized: Missing Authorization header. Please provide "Bearer <EMAIL_API_KEY>"' 
+    });
+  }
+
+  if (!authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ 
+      ok: false, 
+      error: 'Unauthorized: Invalid Authorization format. Expected "Bearer <EMAIL_API_KEY>"' 
+    });
   }
 
   const clientToken = authHeader.split(' ')[1];
@@ -49,7 +109,10 @@ export default async function handler(req, res) {
   }
 
   if (!isAuthorized) {
-    return res.status(401).json({ error: 'Unauthorized' });
+    return res.status(401).json({ 
+      ok: false, 
+      error: 'Unauthorized: Provided EMAIL_API_KEY is incorrect.' 
+    });
   }
 
   const { recipient, subject, message, html, cc, bcc, replyTo, senderName } = req.body || {};
@@ -125,7 +188,6 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    // DEBUG LOG: Safely log the error message and code to Vercel console (No secrets/bodies logged)
     console.error('SMTP Connection/Auth Error:', {
       message: error.message,
       code: error.code,
