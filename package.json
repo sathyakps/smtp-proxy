@@ -1,0 +1,23 @@
+{
+  "name": "smtp-proxy",
+  "version": "1.0.0",
+  "description": "",
+  "homepage": "https://github.com/sathyakps/smtp-proxy#readme",
+  "bugs": {
+    "url": "https://github.com/sathyakps/smtp-proxy/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sathyakps/smtp-proxy.git"
+  },
+  "license": "ISC",
+  "author": "",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "nodemailer": "^10.4.0"
+  }
+}
